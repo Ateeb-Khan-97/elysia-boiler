@@ -13,7 +13,7 @@ function env_initializer() {
     const path = error.errors[0]?.path[0];
     const message = error.errors[0].message?.toLowerCase();
     console.error(`ENV '${path}' is ${message}`);
-    process.exit(1);
+    process.exit(-1);
   }
 }
 

@@ -1,0 +1,6 @@
+{
+  "watch": ["src"],
+  "ext": "ts",
+  "exec": "clear && echo 'Application is starting' && sleep 1 && clear && bun start",
+  "env": { "NODE_ENV": "development" }
+}

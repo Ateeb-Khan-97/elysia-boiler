@@ -6,10 +6,23 @@ To install dependencies:
 bun install
 ```
 
-To run:
+To run in development mode:
 
 ```bash
-bun run index.ts
+bun dev
 ```
 
-This project was created using `bun init` in bun v1.1.34. [Bun](https://bun.sh) is a fast all-in-one JavaScript runtime.
+To run in production mode:
+
+```bash
+bun start:prod
+```
+
+To make single executable build:
+
+```bash
+bun run build
+```
+
+Kickstart your projects with a lightweight, fast, and scalable Elysia.js boilerplate! 🚀
+This boilerplate is designed to streamline the development of modern web applications using Elysia.js – a blazing-fast framework for building server-side applications.

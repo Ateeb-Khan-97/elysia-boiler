@@ -1,5 +1,5 @@
 {
-  "name": "elysia-nest",
+  "name": "elysia-boilerplate",
   "module": "src/index.ts",
   "type": "module",
   "scripts": {

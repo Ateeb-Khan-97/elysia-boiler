@@ -1,14 +1,9 @@
-import type { Context } from "elysia";
-import { UnauthorizedException } from "../helper/exception.helper";
+import { createParameterDecorator } from '@/config/create-decorator';
+import type { Handler } from 'elysia';
 
-export const protect = async (c: Context) => {
-  const authHeader = c.request.headers.get("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer"))
-    throw new UnauthorizedException();
-
-  const [, token] = authHeader.split(" ");
-  if (!token) throw new UnauthorizedException();
-
-  // Todo: Add JWT Logic Here
-  (c.store as any)["userId"] = 1;
+export const AuthHandler: Handler = (c) => {
+  // TODO: ADD AUTH MECHANISM HERE
+  (c.store as any)['userId'] = 1;
 };
+
+export const CurrentUser = createParameterDecorator((c) => (c.store as any)['userId']);

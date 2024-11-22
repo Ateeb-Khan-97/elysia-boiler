@@ -1,226 +1,158 @@
-import "reflect-metadata";
-import type { Context, Elysia, TSchema } from "elysia";
-import LoggerService from "@/helper/logger.service";
+import 'reflect-metadata';
+import type { Handler, TSchema } from 'elysia';
+import type Elysia from 'elysia';
+import { injectServices } from './injection.decorator';
+import { HttpStatus } from '@/helper/http-status.constant';
+import LoggerService from '@/helper/logger.service';
 
-type Method = "post" | "put" | "patch" | "delete" | "get";
-type Service = new () => void;
-type Metadata = {
+type IMethodType = 'get' | 'post' | 'put' | 'patch' | 'delete';
+type IClassLike = any;
+type IMetadata = {
   path: string;
-  method: Method;
-  class_method: string;
-  body?: { schema: TSchema; param_index: number };
-  query?: { schema: TSchema; param_index: number };
-  param?: { key: string; param_index: number };
-  context?: { param_index: number };
-  public: boolean;
+  method: (...props: any) => any;
+  methodType: IMethodType;
+  public?: true;
+  body?: { index: number; schema?: TSchema };
+  query?: { index: number; schema?: TSchema };
+  param?: { index: number; key: string };
+  customDecorators?: Array<{ index: number; handler: Handler }>;
 };
 
-export function Controller(prefix: string): ClassDecorator {
-  return (target) => {
-    const next_tick = () => {
-      const services: Service[] = Reflect.getMetadata("services", target) ?? [];
-      const apiTag: string | undefined = Reflect.getMetadata("api_tag", target);
-      const targetInstance = new (target as any)(...services);
-      const metadata: Metadata[] =
-        Reflect.getMetadata("metadata", target) ?? [];
+const nextTick = (): Promise<void> => new Promise((res) => process.nextTick(res));
 
-      async function init(app: Elysia) {
-        LoggerService("RoutesResolver").log(`${target.name} {${prefix}}`);
+export const ApiTag = (apiTag: string) => {
+  return (target: IClassLike) => {
+    Reflect.defineMetadata('api-tag', apiTag, target);
+  };
+};
 
-        for (const em of metadata) {
-          const path = prefix + em.path;
-          const route_exp_msg = `Mapped {${path}, ${em.method.toUpperCase()}} route`;
-          LoggerService("RouterExplorer").log(route_exp_msg);
+export const Controller = (prefix: string) => {
+  return (target: IClassLike) => {
+    async function init(app: Elysia, authMiddleware?: Handler) {
+      LoggerService('RoutesResolver').log(`${target.name} {${prefix}}`);
 
-          const handler_parameters = [] as any[];
-          const bind_handler =
-            targetInstance[em.class_method].bind(targetInstance);
-          const isGenerator = bind_handler.constructor.name
-            .toLowerCase()
-            .endsWith("generatorfunction");
+      await nextTick();
+      const apiTag: string | undefined = Reflect.getMetadata('api-tag', target);
+      const metadata: IMetadata[] = Reflect.getMetadata('metadata', target) || [];
+      const controllerInstance = injectServices(target);
 
-          let handler: Function;
-          if (isGenerator) {
-            handler = async function* (c: any) {
-              if (typeof em.body?.param_index === "number")
-                handler_parameters[em.body.param_index] = c.body;
-              if (typeof em.query?.param_index === "number")
-                handler_parameters[em.query.param_index] = c.query;
-              if (typeof em.param?.param_index === "number")
-                handler_parameters[em.param.param_index] =
-                  c.params[em.param.key];
-              if (typeof em.context?.param_index === "number")
-                handler_parameters[em.context.param_index] = c;
+      for (const em of metadata) {
+        const path = prefix + em.path;
+        const binnedHandler = em.method.bind(controllerInstance);
+        const handlerParameters: any[] = [];
+        const isPublic = !!(!authMiddleware || em.public);
 
-              for await (let chunk of bind_handler(...handler_parameters))
-                yield chunk;
-            };
-          } else {
-            handler = async function (c: any) {
-              if (typeof em.body?.param_index === "number")
-                handler_parameters[em.body.param_index] = c.body;
-              if (typeof em.query?.param_index === "number")
-                handler_parameters[em.query.param_index] = c.query;
-              if (typeof em.param?.param_index === "number")
-                handler_parameters[em.param.param_index] =
-                  c.params[em.param.key];
-              if (typeof em.context?.param_index === "number")
-                handler_parameters[em.context.param_index] = c;
+        app.route(
+          em.methodType,
+          path,
+          async (c) => {
+            if (em.body) handlerParameters[em.body.index] = c.body;
+            if (em.query) handlerParameters[em.query.index] = c.query;
+            if (em.param) handlerParameters[em.param.index] = c.params[em.param.key];
+            if (em.customDecorators && em.customDecorators.length > 0) {
+              for (const cd of em.customDecorators) {
+                handlerParameters[cd.index] = await cd.handler(c);
+              }
+            }
 
-              return bind_handler(...handler_parameters);
-            };
-          }
-
-          app.route(em.method, path, handler, {
+            const response = await binnedHandler(...handlerParameters);
+            c.set.status = response?.status ?? HttpStatus.OK;
+            return response;
+          },
+          {
+            // @ts-ignore
+            query: em.query?.schema,
             body: em.body?.schema,
-            query: em.query?.schema as any,
-            tags: apiTag ? [apiTag] : [],
             config: { allowMeta: true },
-            detail: em.public
-              ? { security: [] }
-              : { security: [{ BearerAuth: [] }] },
-          });
-        }
+            tags: apiTag ? [apiTag] : undefined,
+            beforeHandle: authMiddleware ? authMiddleware : undefined,
+            detail: isPublic ? { security: [] } : { security: [{ BearerAuth: [] }] },
+          }
+        );
 
-        return app;
+        const msg = `Mapped {${path}, ${em.methodType.toUpperCase()}} route`;
+        LoggerService('RouterExplorer').log(msg);
       }
 
-      (target as any)["init"] = init;
-    };
+      return app;
+    }
 
-    process.nextTick(next_tick);
+    (target as any)['init'] = init;
   };
-}
-export function ApiTag(tag: string): ClassDecorator {
-  return (target) => {
-    Reflect.defineMetadata("api_tag", tag, target);
-  };
-}
+};
 
-export function Get(path = "/"): MethodDecorator {
-  return (target, pk, desc: PropertyDescriptor) => {
-    process.nextTick(() => {
-      const c_metadata =
-        Reflect.getMetadata("metadata", target.constructor) ?? [];
-      const metadata = Reflect.getMetadata("metadata", desc.value) ?? {};
+function httpMethodMetadataSetter(props: {
+  target: IClassLike;
+  value: any;
+  path: string;
+  methodType: IMethodType;
+}) {
+  const c_metadata = Reflect.getMetadata('metadata', props.target.constructor) ?? [];
+  const metadata = Reflect.getMetadata('metadata', props.value) ?? {};
 
-      metadata["path"] = path;
-      metadata["method"] = "get";
-      metadata["class_method"] = pk;
+  metadata['path'] = props.path;
+  metadata['method'] = props.value;
+  metadata['methodType'] = props.methodType;
 
-      c_metadata.push(metadata);
-      Reflect.defineMetadata("metadata", metadata, desc.value);
-      Reflect.defineMetadata("metadata", c_metadata, target.constructor);
-    });
-  };
-}
-export function Post(path = "/"): MethodDecorator {
-  return (target, pk, desc: PropertyDescriptor) => {
-    process.nextTick(() => {
-      const c_metadata =
-        Reflect.getMetadata("metadata", target.constructor) ?? [];
-      const metadata = Reflect.getMetadata("metadata", desc.value) ?? {};
-
-      metadata["path"] = path;
-      metadata["method"] = "post";
-      metadata["class_method"] = pk;
-
-      c_metadata.push(metadata);
-      Reflect.defineMetadata("metadata", metadata, desc.value);
-      Reflect.defineMetadata("metadata", c_metadata, target.constructor);
-    });
-  };
-}
-export function Put(path = "/"): MethodDecorator {
-  return (target, pk, desc: PropertyDescriptor) => {
-    process.nextTick(() => {
-      const c_metadata =
-        Reflect.getMetadata("metadata", target.constructor) ?? [];
-      const metadata = Reflect.getMetadata("metadata", desc.value) ?? {};
-
-      metadata["path"] = path;
-      metadata["method"] = "put";
-      metadata["class_method"] = pk;
-
-      c_metadata.push(metadata);
-      Reflect.defineMetadata("metadata", metadata, desc.value);
-      Reflect.defineMetadata("metadata", c_metadata, target.constructor);
-    });
-  };
-}
-export function Patch(path = "/"): MethodDecorator {
-  return (target, pk, desc: PropertyDescriptor) => {
-    process.nextTick(() => {
-      const c_metadata =
-        Reflect.getMetadata("metadata", target.constructor) ?? [];
-      const metadata = Reflect.getMetadata("metadata", desc.value) ?? {};
-
-      metadata["path"] = path;
-      metadata["method"] = "patch";
-      metadata["class_method"] = pk;
-
-      c_metadata.push(metadata);
-      Reflect.defineMetadata("metadata", metadata, desc.value);
-      Reflect.defineMetadata("metadata", c_metadata, target.constructor);
-    });
-  };
-}
-export function Delete(path = "/"): MethodDecorator {
-  return (target, pk, desc: PropertyDescriptor) => {
-    process.nextTick(() => {
-      const c_metadata =
-        Reflect.getMetadata("metadata", target.constructor) ?? [];
-      const metadata = Reflect.getMetadata("metadata", desc.value) ?? {};
-
-      metadata["path"] = path;
-      metadata["method"] = "delete";
-      metadata["class_method"] = pk;
-
-      c_metadata.push(metadata);
-      Reflect.defineMetadata("metadata", metadata, desc.value);
-      Reflect.defineMetadata("metadata", c_metadata, target.constructor);
-    });
-  };
-}
-export function Public(): MethodDecorator {
-  return (target, pk, desc: PropertyDescriptor) => {
-    const metadata = Reflect.getMetadata("metadata", desc.value) ?? {};
-    metadata["public"] = true;
-    Reflect.defineMetadata("metadata", metadata, desc.value);
-  };
+  c_metadata.push(metadata);
+  Reflect.defineMetadata('metadata', metadata, props.value);
+  Reflect.defineMetadata('metadata', c_metadata, props.target.constructor);
 }
 
-export function Body(schema: TSchema): ParameterDecorator {
-  return (target: any, pk: any, pi) => {
-    const decorator_metadata =
-      Reflect.getMetadata("metadata", target[pk]) ?? {};
-    decorator_metadata["body"] = { schema, param_index: pi };
-    Reflect.defineMetadata("metadata", decorator_metadata, target[pk]);
+export const Get = (path = '/') => {
+  return (target: IClassLike, pk: string, { value }: PropertyDescriptor) => {
+    process.nextTick(() => httpMethodMetadataSetter({ target, value, methodType: 'get', path }));
   };
-}
+};
+export const Put = (path = '/') => {
+  return (target: IClassLike, pk: string, { value }: PropertyDescriptor) => {
+    process.nextTick(() => httpMethodMetadataSetter({ target, value, methodType: 'put', path }));
+  };
+};
+export const Post = (path = '/') => {
+  return (target: IClassLike, pk: string, { value }: PropertyDescriptor) => {
+    process.nextTick(() => httpMethodMetadataSetter({ target, value, methodType: 'post', path }));
+  };
+};
+export const Patch = (path = '/') => {
+  return (target: IClassLike, pk: string, { value }: PropertyDescriptor) => {
+    process.nextTick(() => httpMethodMetadataSetter({ target, value, methodType: 'patch', path }));
+  };
+};
+export const Delete = (path = '/') => {
+  return (target: IClassLike, pk: string, { value }: PropertyDescriptor) => {
+    process.nextTick(() => httpMethodMetadataSetter({ target, value, methodType: 'delete', path }));
+  };
+};
 
-export function Param(key: string): ParameterDecorator {
-  return (target: any, pk: any, pi) => {
-    const decorator_metadata =
-      Reflect.getMetadata("metadata", target[pk]) ?? {};
-    decorator_metadata["param"] = { key, param_index: pi };
-    Reflect.defineMetadata("metadata", decorator_metadata, target[pk]);
+export const Public = () => {
+  return (target: IClassLike, pk: string, { value }: PropertyDescriptor) => {
+    const metadata = Reflect.getMetadata('metadata', target[pk]) ?? {};
+    metadata['public'] = true;
+    Reflect.defineMetadata('metadata', metadata, target[pk]);
   };
-}
+};
 
-export function Query(schema: TSchema): ParameterDecorator {
-  return (target: any, pk: any, pi) => {
-    const decorator_metadata =
-      Reflect.getMetadata("metadata", target[pk]) ?? {};
-    decorator_metadata["query"] = { schema, param_index: pi };
-    Reflect.defineMetadata("metadata", decorator_metadata, target[pk]);
+export const Body = (schema?: TSchema) => {
+  return (target: any, pk: string, pi: number) => {
+    const metadata = Reflect.getMetadata('metadata', target[pk]) ?? {};
+    metadata['body'] = { index: pi, schema };
+    Reflect.defineMetadata('metadata', metadata, target[pk]);
   };
-}
-export function Context(): ParameterDecorator {
-  return (target: any, pk: any, pi) => {
-    const decorator_metadata =
-      Reflect.getMetadata("metadata", target[pk]) ?? {};
-    decorator_metadata["context"] = { param_index: pi };
-    Reflect.defineMetadata("metadata", decorator_metadata, target[pk]);
+};
+
+export const Query = (schema?: TSchema) => {
+  return (target: any, pk: string, pi: number) => {
+    const metadata = Reflect.getMetadata('metadata', target['pk']) ?? {};
+    metadata['query'] = { index: pi, schema };
+    Reflect.defineMetadata('metadata', metadata, target[pk]);
   };
-}
+};
+
+export const Param = (key: string) => {
+  return (target: any, pk: string, pi: number) => {
+    const metadata = Reflect.getMetadata('metadata', target['pk']) ?? {};
+    metadata['param'] = { index: pi, key };
+    Reflect.defineMetadata('metadata', metadata, target[pk]);
+  };
+};

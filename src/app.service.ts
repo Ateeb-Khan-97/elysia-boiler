@@ -1,4 +1,8 @@
-import { Injectable } from "./utils/decorators/service.decorator";
+import { Injectable } from './utils/decorators/injection.decorator';
 
 @Injectable()
-export class AppService {}
+export class AppService {
+  helloWorld() {
+    console.log('Hello World');
+  }
+}

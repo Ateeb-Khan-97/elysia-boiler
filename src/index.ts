@@ -11,6 +11,7 @@ import { SWAGGER_CONFIG } from './config/swagger.config';
 import { CORS_CONFIG } from './config/cors.config';
 import { ErrorHandler } from './middleware/error.middleware';
 import { AuthHandler } from './middleware/auth.middleware';
+import { ResponseMapper } from './helper/response-mapper';
 
 async function bootstrap() {
   const app = await ElysiaFactory.create(new Elysia(), {
@@ -18,6 +19,7 @@ async function bootstrap() {
     plugins: [swagger(SWAGGER_CONFIG), cors(CORS_CONFIG)],
     errorHandler: ErrorHandler,
     authMiddleware: AuthHandler,
+    responseMapper: ResponseMapper.map,
   });
 
   app.listen(APP_CONST.PORT, () => LoggerService.log(APP_CONST.BOOTSTRAP_MSG));

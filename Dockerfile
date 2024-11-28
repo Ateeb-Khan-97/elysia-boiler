@@ -21,6 +21,8 @@ FROM gcr.io/distroless/base AS runner
 WORKDIR /app
 
 COPY --from=builder /app/dist/server server
+COPY .env .env
+
 
 ENV NODE_ENV=production
 CMD ["./server"]

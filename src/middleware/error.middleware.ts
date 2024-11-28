@@ -1,15 +1,8 @@
-import {
-  NotFoundError,
-  ValidationError,
-  type ErrorHandler as ElysiaErrorHandler,
-} from "elysia";
-import { HttpStatus } from "../helper/http-status.constant";
+import { NotFoundError, ValidationError, type ErrorHandler as ElysiaErrorHandler } from 'elysia';
+import { HttpStatus } from '../helper/http-status.constant';
+import { HttpException } from '@/helper/exception.helper';
 
-export const ErrorHandler: ElysiaErrorHandler<any, any> = ({
-  request,
-  error,
-  set,
-}) => {
+export const ErrorHandler: ElysiaErrorHandler<any, any> = ({ request, error, set }) => {
   const RESPONSE = {
     success: false,
     status: HttpStatus.INTERNAL_SERVER_ERROR,
@@ -17,24 +10,27 @@ export const ErrorHandler: ElysiaErrorHandler<any, any> = ({
     data: null as any,
   };
 
+  if (error instanceof HttpException) {
+    RESPONSE['message'] = error.message;
+    RESPONSE['status'] = error.status;
+  }
+
   if (error instanceof NotFoundError) {
     const url = new URL(request.url);
 
-    RESPONSE["status"] = HttpStatus.NOT_FOUND;
-    RESPONSE["message"] = `Cannot ${request.method.toUpperCase()} ${
-      url.pathname
-    } NOT FOUND`;
+    RESPONSE['status'] = HttpStatus.NOT_FOUND;
+    RESPONSE['message'] = `Cannot ${request.method.toUpperCase()} ${url.pathname} NOT FOUND`;
   }
 
   if (error instanceof ValidationError) {
     const cause = error.all[0];
-    RESPONSE["status"] = HttpStatus.BAD_REQUEST;
-    RESPONSE["message"] = "Validation failed";
+    RESPONSE['status'] = HttpStatus.BAD_REQUEST;
+    RESPONSE['message'] = 'Validation failed';
 
     if (cause.summary != undefined) {
-      const path = cause.path.replaceAll("/", "");
+      const path = cause.path.replaceAll('/', '');
       const message = cause.message as string;
-      RESPONSE["message"] = `Field ${path} is ${message.toLowerCase()}`;
+      RESPONSE['message'] = `Field ${path} is ${message.toLowerCase()}`;
     }
   }
 

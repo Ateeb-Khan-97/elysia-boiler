@@ -1,6 +1,10 @@
 import 'reflect-metadata';
+import { ApplicationDataSource, connectDB } from '../data-source';
+import type { Repository } from 'typeorm';
+
 type IClassLike = new (...props: any[]) => any;
 
+const globalRepositories = new Map<string, Repository<any>>();
 const globalServices = new Map<string, any>();
 
 export const Injectable = () => {
@@ -10,7 +14,10 @@ export const Injectable = () => {
       process.exit(-1);
     }
 
-    globalServices.set(target.name, new target());
+    const repos = Reflect.getMetadata('params', target) || [];
+    const params: any[] = [];
+    for (const eachRepo of repos) params[eachRepo.pi] = eachRepo.repository;
+    globalServices.set(target.name, new target(...params));
   };
 };
 
@@ -29,6 +36,22 @@ export const Inject = () => {
 
     parameters[pi] = serviceInstance;
     Reflect.defineMetadata('design:paramtypes', parameters, target);
+  };
+};
+
+export const InjectRepository = (entity: new (...props: any) => any) => {
+  return (target: IClassLike, pk: string | undefined, pi: number) => {
+    let repository = globalRepositories.get(entity.name);
+    const params = Reflect.getMetadata('params', target) || [];
+
+    if (repository) {
+      params.push({ repository, pi });
+    } else {
+      repository = ApplicationDataSource.getRepository(entity);
+      globalRepositories.set(entity.name, repository);
+      params.push({ repository, pi });
+    }
+    Reflect.defineMetadata('params', params, target);
   };
 };
 

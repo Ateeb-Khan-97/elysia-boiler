@@ -1,8 +1,15 @@
-import z from "zod";
+import z from 'zod';
 
 const env_schema = z.object({
   PORT: z.coerce.number().default(5000),
-  NODE_ENV: z.enum(["production", "development"]).default("development"),
+  NODE_ENV: z.enum(['production', 'development']).default('development'),
+  DATABASE_URL: z.string(),
+  REFRESH_SECRET: z.string(),
+  REFRESH_TIME: z.coerce.number(),
+  ACCESS_SECRET: z.string(),
+  ACCESS_TIME: z.coerce.number(),
+  CONFIRMATION_SECRET: z.string(),
+  CONFIRMATION_TIME: z.coerce.number(),
 });
 type I_ENV = z.infer<typeof env_schema>;
 

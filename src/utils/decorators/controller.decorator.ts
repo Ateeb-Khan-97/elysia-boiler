@@ -28,7 +28,11 @@ export const ApiTag = (apiTag: string) => {
 
 export const Controller = (prefix: string) => {
   return (target: IClassLike) => {
-    async function init(app: Elysia, authMiddleware?: Handler) {
+    async function init(
+      app: Elysia,
+      authMiddleware?: Handler,
+      responseMapper?: (res: any, set: { status?: number | string }) => any
+    ) {
       LoggerService('RoutesResolver').log(`${target.name} {${prefix}}`);
 
       await nextTick();
@@ -38,9 +42,37 @@ export const Controller = (prefix: string) => {
 
       for (const em of metadata) {
         const path = prefix + em.path;
-        const binnedHandler = em.method.bind(controllerInstance);
+        const boundHandler = em.method.bind(controllerInstance);
+        const isGenerator = boundHandler.constructor.name.toLowerCase().includes('generator');
         const handlerParameters: any[] = [];
         const isPublic = !!(!authMiddleware || em.public);
+
+        if (isGenerator) {
+          app.route(em.methodType, path, async function* (c) {
+            if (em.body) handlerParameters[em.body.index] = c.body;
+            if (em.query) handlerParameters[em.query.index] = c.query;
+            if (em.param) handlerParameters[em.param.index] = c.params[em.param.key];
+            if (em.customDecorators && em.customDecorators.length > 0)
+              for (const cd of em.customDecorators)
+                handlerParameters[cd.index] = await cd.handler(c);
+
+            const iterable = await boundHandler(...handlerParameters);
+            try {
+              for await (const chunk of iterable) yield chunk;
+            } catch (error: any) {
+              yield {
+                status: error?.status ?? HttpStatus.BAD_REQUEST,
+                message: error?.message ?? HttpStatus.BAD_REQUEST_MESSAGE,
+                data: null,
+                success: false,
+              };
+            }
+          });
+
+          const msg = `Mapped {${path}, ${em.methodType.toUpperCase()}} route`;
+          LoggerService('RouterExplorer').log(msg);
+          continue;
+        }
 
         app.route(
           em.methodType,
@@ -55,8 +87,10 @@ export const Controller = (prefix: string) => {
               }
             }
 
-            const response = await binnedHandler(...handlerParameters);
+            const response = await boundHandler(...handlerParameters);
             c.set.status = response?.status ?? HttpStatus.OK;
+
+            if (responseMapper) return responseMapper(response, c.set);
             return response;
           },
           {
@@ -143,7 +177,7 @@ export const Body = (schema?: TSchema) => {
 
 export const Query = (schema?: TSchema) => {
   return (target: any, pk: string, pi: number) => {
-    const metadata = Reflect.getMetadata('metadata', target['pk']) ?? {};
+    const metadata = Reflect.getMetadata('metadata', target[pk]) ?? {};
     metadata['query'] = { index: pi, schema };
     Reflect.defineMetadata('metadata', metadata, target[pk]);
   };
@@ -151,7 +185,7 @@ export const Query = (schema?: TSchema) => {
 
 export const Param = (key: string) => {
   return (target: any, pk: string, pi: number) => {
-    const metadata = Reflect.getMetadata('metadata', target['pk']) ?? {};
+    const metadata = Reflect.getMetadata('metadata', target[pk]) ?? {};
     metadata['param'] = { index: pi, key };
     Reflect.defineMetadata('metadata', metadata, target[pk]);
   };

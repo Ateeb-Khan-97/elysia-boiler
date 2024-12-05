@@ -1,9 +1,6 @@
-import Stream from '@elysiajs/stream';
 import type { AfterHandler } from 'elysia';
 
-export const ResponseHandler: AfterHandler = (c) => {
-	if ((c.response as any) instanceof Stream) return c.response;
-
+export const ResponseHandler: AfterHandler = async (c) => {
 	const RESPONSE = { status: 200, message: 'OK', data: null as unknown, success: true };
 
 	if (typeof c.response !== 'object' || Array.isArray(c.response))

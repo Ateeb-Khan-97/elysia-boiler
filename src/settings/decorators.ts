@@ -40,43 +40,53 @@ export const Controller = (prefix: string) => {
 			const controller = new target(...services);
 			const metadata: Metadata[] = Reflect.getMetadata('metadata', target) || [];
 			for (const eachMetadata of metadata) {
+				const getParameters = async (c: Context): Promise<any[]> => {
+					const parameters = [] as any;
+					if (eachMetadata.rawContext) {
+						parameters[eachMetadata.rawContext.index] = c;
+					}
+					if (eachMetadata.bodySchema) {
+						parameters[eachMetadata.bodySchema.index] = c.body;
+					}
+					if (eachMetadata.querySchema) {
+						parameters[eachMetadata.querySchema.index] = c.query;
+					}
+					if (eachMetadata.paramSlug) {
+						parameters[eachMetadata.paramSlug.index] = c.params?.[eachMetadata.paramSlug.slug];
+					}
+
+					if (eachMetadata.customDecorators) {
+						for (const eachCustomDecorator of eachMetadata.customDecorators) {
+							parameters[eachCustomDecorator.index] = await eachCustomDecorator.handler(c);
+						}
+					}
+
+					return parameters;
+				};
 				const bondedHandler = eachMetadata.handler.bind(controller);
-				app.route(
-					eachMetadata.method,
-					prefix + eachMetadata.path,
-					async (c) => {
-						const handlerParameters = [];
-						if (eachMetadata.bodySchema) {
-							handlerParameters[eachMetadata.bodySchema.index] = c.body;
-						}
-						if (eachMetadata.querySchema) {
-							handlerParameters[eachMetadata.querySchema.index] = c.query;
-						}
-						if (eachMetadata.paramSlug) {
-							handlerParameters[eachMetadata.paramSlug.index] = c.params?.[eachMetadata.paramSlug.slug];
-						}
+				const isGenerator = bondedHandler.constructor.name.includes('GeneratorFunction');
+				const getHandler = () => {
+					if (isGenerator) {
+						return async function* (c: Context) {
+							for await (const eachValue of bondedHandler(...(await getParameters(c))) as any[])
+								yield eachValue;
+						};
+					}
+					return async (c: Context) => bondedHandler(...(await getParameters(c)));
+				};
 
-						if (eachMetadata.customDecorators) {
-							for (const eachCustomDecorator of eachMetadata.customDecorators) {
-								handlerParameters[eachCustomDecorator.index] = await eachCustomDecorator.handler(c);
-							}
-						}
-
-						return await bondedHandler(...handlerParameters);
-					},
-					{
-						afterHandle,
-						beforeHandle: eachMetadata.isPublic ? undefined : beforeHandle,
-						config: {},
-						tags: [tag],
-						body: eachMetadata.bodySchema?.schema,
-						query: eachMetadata.querySchema?.schema as any,
-						detail:
-							!options?.auth || eachMetadata.isPublic
-								? { security: [] }
-								: { security: [{ BearerAuth: [] }] },
-					},
-				);
+				app.route(eachMetadata.method, prefix + eachMetadata.path, getHandler(), {
+					afterHandle: isGenerator ? undefined : afterHandle,
+					beforeHandle: eachMetadata.isPublic ? undefined : beforeHandle,
+					config: {},
+					tags: [tag],
+					body: eachMetadata.bodySchema?.schema,
+					query: eachMetadata.querySchema?.schema as any,
+					detail:
+						!options?.auth || eachMetadata.isPublic
+							? { security: [] }
+							: { security: [{ BearerAuth: [] }] },
+				});
 
 				LoggerService('RouterExplorer').log(
 					`Mapped {${eachMetadata.path}, ${eachMetadata.method.toUpperCase()}} route`,
@@ -167,6 +177,7 @@ function httpMethodMetadataSetter(props: HttpMethodMetadataSetterProps) {
 	const bodySchema = Reflect.getMetadata('body', props.handler);
 	const paramSlug = Reflect.getMetadata('param', props.handler);
 	const querySchema = Reflect.getMetadata('query', props.handler);
+	const rawContext = Reflect.getMetadata('rawContext', props.handler);
 	const customDecorators = Reflect.getMetadata('customDecorators', props.handler) || [];
 	const isPublic = Reflect.getMetadata('public', props.handler);
 
@@ -180,6 +191,7 @@ function httpMethodMetadataSetter(props: HttpMethodMetadataSetterProps) {
 		paramSlug,
 		querySchema,
 		customDecorators,
+		rawContext,
 		isPublic,
 		handler: handler as any,
 	});
@@ -253,6 +265,12 @@ export const Public = (): MethodDecorator => {
 	};
 };
 
+export const RawContext = () => {
+	return (target: any, propertyKey: string, parameterIndex: number) => {
+		Reflect.defineMetadata('rawContext', { index: parameterIndex }, target[propertyKey]);
+	};
+};
+
 export const Body = (schema?: TSchema) => {
 	return (target: any, propertyKey: string, parameterIndex: number) => {
 		Reflect.defineMetadata('body', { schema, index: parameterIndex }, target[propertyKey]);
@@ -299,6 +317,7 @@ type Metadata = {
 	bodySchema?: { schema?: TSchema; index: number };
 	querySchema?: { schema?: TSchema; index: number };
 	paramSlug?: { slug: string; index: number };
+	rawContext?: { index: number };
 	isPublic?: true;
 	customDecorators: { handler: Handler; index: number }[];
 };

@@ -1,28 +1,28 @@
-import Elysia from 'elysia';
-import { ElysiaFactory } from './config/elysia-factory.config';
+import 'reflect-metadata';
+
+import { Elysia } from 'elysia';
+import { ElysiaFactory } from './settings/elysia.setting';
+import { LoggerService } from './helper/logger.service';
 import { AppModule } from './app.module';
-
-import LoggerService from './helper/logger.service';
-import swagger from '@elysiajs/swagger';
-import cors from '@elysiajs/cors';
-
-import { APP_CONST } from './constants/application.constant';
-import { SWAGGER_CONFIG } from './config/swagger.config';
-import { CORS_CONFIG } from './config/cors.config';
-import { ErrorHandler } from './middleware/error.middleware';
+import { ResponseHandler } from './middleware/response.middleware';
 import { AuthHandler } from './middleware/auth.middleware';
-import { ResponseMapper } from './helper/response-mapper';
+import { ErrorHandler } from './middleware/error.middleware';
+import { SwaggerConfig } from './config/swagger.config';
+import { CorsConfig } from './config/cors.config';
+import { ENV, isDev } from './config/env.config';
 
 async function bootstrap() {
-  const app = await ElysiaFactory.create(new Elysia(), {
-    baseModule: AppModule,
-    plugins: [swagger(SWAGGER_CONFIG), cors(CORS_CONFIG)],
-    errorHandler: ErrorHandler,
-    authMiddleware: AuthHandler,
-    responseMapper: ResponseMapper.map,
-  });
+	const app = await ElysiaFactory.create(AppModule, new Elysia(), {
+		cors: CorsConfig,
+		swagger: isDev() && SwaggerConfig,
+		response: ResponseHandler,
+		error: ErrorHandler,
+		auth: AuthHandler,
+	});
 
-  app.listen(APP_CONST.PORT, () => LoggerService.log(APP_CONST.BOOTSTRAP_MSG));
+	app.listen(ENV.PORT, () => {
+		LoggerService.log(`Application running at http://localhost:${ENV.PORT}`);
+	});
 }
 
 bootstrap();

@@ -5,7 +5,7 @@ WORKDIR /app
 RUN apt update
 RUN apt install curl unzip -y
 
-RUN curl https://bun.sh/install | bash -s "bun-v1.1.33"
+RUN curl https://bun.sh/install | bash -s "bun-v1.1.38"
 
 COPY src src
 COPY tsconfig.json .
@@ -13,6 +13,7 @@ COPY package.json .
 COPY bun.lockb .
 
 RUN /root/.bun/bin/bun install --production
+RUN /root/.bun/bin/bun run lint
 RUN /root/.bun/bin/bun run build
 
 # ? RUNNER

@@ -1,16 +1,18 @@
 {
-  "name": "elysia-boilerplate",
+  "name": "best-js",
   "module": "src/index.ts",
   "type": "module",
   "scripts": {
-    "dev": "nodemon",
+    "start": "bun run src/index.ts",
+    "format": "bunx biome format --write ./src",
+    "lint": "bunx biome lint ./src",
     "build": "bun build --compile --minify-whitespace --minify-syntax --target bun --outfile dist/server ./src/index.ts",
-    "start": "bun src/index.ts",
-    "start:prod": "NODE_ENV=production bun src/index.ts"
+    "dev": "nodemon"
   },
   "devDependencies": {
-    "@types/bun": "^1.1.13",
-    "@types/jsonwebtoken": "^9.0.7"
+    "@biomejs/biome": "1.9.4",
+    "@types/bun": "^1.1.14",
+    "nodemon": "^3.1.7"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
@@ -19,11 +21,8 @@
     "@elysiajs/cors": "^1.1.1",
     "@elysiajs/swagger": "^1.1.6",
     "colors": "^1.4.0",
-    "elysia": "^1.1.25",
-    "jsonwebtoken": "^9.0.2",
-    "pg": "^8.13.1",
+    "elysia": "^1.1.26",
     "reflect-metadata": "^0.2.2",
-    "typeorm": "^0.3.20",
     "zod": "^3.23.8"
   }
 }

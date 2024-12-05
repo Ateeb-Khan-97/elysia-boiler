@@ -1,9 +1,9 @@
 import type Elysia from 'elysia';
-import type { ClassLike } from '../types/common';
+import type { ClassLike } from './types/common';
 import { cors, type CORSConfig } from '@elysiajs/cors';
 import { swagger, type ElysiaSwaggerConfig } from '@elysiajs/swagger';
 import type { AfterHandler, ErrorHandler, Handler } from 'elysia';
-import { LoggerService } from '@/helper/logger.service';
+import { LoggerService } from './logger.service';
 
 export const ElysiaFactory = {
 	create: async <T extends string>(

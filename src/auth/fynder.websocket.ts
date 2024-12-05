@@ -1,6 +1,6 @@
-import { LoggerService } from '@/helper/logger.service';
 import { Websocket, Message } from '@/settings/decorators';
-import type { WS } from '@/types/common';
+import { LoggerService } from '@/settings/logger.service';
+import type { WS } from '@/settings/types/common';
 
 @Websocket('/ws/fynder')
 export class FynderWebsocket {

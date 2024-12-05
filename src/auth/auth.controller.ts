@@ -1,4 +1,4 @@
-import { LoggerService } from '../helper/logger.service';
+import { LoggerService } from '@/settings/logger.service';
 import { ApiTag, Controller, Post, Public } from '../settings/decorators';
 import { AuthService } from './auth.service';
 

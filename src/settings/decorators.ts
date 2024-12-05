@@ -1,7 +1,7 @@
 import type Elysia from 'elysia';
-import type { ClassLike } from '../types/common';
+import type { ClassLike } from './types/common';
 import type { AfterHandler, Context, Handler, TSchema } from 'elysia';
-import { LoggerService } from '@/helper/logger.service';
+import { LoggerService } from './logger.service';
 
 const ServicesMap = new Map<string, any>();
 const nextTick = () => new Promise((resolve) => process.nextTick(resolve));
